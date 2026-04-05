@@ -1,8 +1,12 @@
-# Cloud Build config — triggered by push to the connected repo.
-# Builds the Docker image and pushes it to Artifact Registry.
+# Cloud Build config — builds the Docker image and pushes it to Artifact Registry.
+#
+# Required substitutions (set at trigger-time or via --substitutions):
+#   _REGION        Artifact Registry region (e.g. us-central1)
+#   _REPOSITORY    Artifact Registry repository name (e.g. agent-sandbox)
+#   _IMAGE         Image name (e.g. pi-agent-sandbox)
 #
 # Tags applied to the image:
-#   - $SHORT_SHA   (first 7 chars of the commit SHA — always set by triggers)
+#   - $SHORT_SHA   (first 7 chars of the commit SHA)
 #   - latest
 #
 # Before first run, create the repo once:
@@ -13,23 +17,23 @@
 substitutions:
   _REGION: us-central1
   _REPOSITORY: agent-sandbox
-  _IMAGE: pi-agent-workspace
+  _IMAGE: pi-agent-sandbox
 
 steps:
+  # Build with BuildKit; tag with both commit SHA and latest.
   - id: build
     name: gcr.io/cloud-builders/docker
     env:
       - DOCKER_BUILDKIT=1
     args:
       - build
-      - --platform
-      - linux/amd64
       - --tag
       - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:${SHORT_SHA}
       - --tag
       - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:latest
       - .
 
+  # Push both tags.
   - id: push
     name: gcr.io/cloud-builders/docker
     args:
