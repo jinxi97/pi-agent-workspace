@@ -6,20 +6,15 @@ import {
   type AgentSessionEvent,
 } from "@mariozechner/pi-coding-agent";
 import { getModel } from "@mariozechner/pi-ai";
+import { readFileSync } from "node:fs";
 import { config } from "./config.js";
-import { getAllApiKeys } from "./api-keys.js";
 import type { SessionSummary } from "./types.js";
 
-/** Shared in-memory auth store. Keys are populated from our JSON file on demand. */
-const authStorage = AuthStorage.inMemory();
+const GEMINI_PROVIDER = "google";
 
-/** Sync current api-keys.json contents into authStorage as runtime overrides. */
-export function syncApiKeysToAuthStorage(): void {
-  const keys = getAllApiKeys();
-  for (const [provider, apiKey] of Object.entries(keys)) {
-    authStorage.setRuntimeApiKey(provider, apiKey);
-  }
-}
+/** Shared in-memory auth store seeded with the Gemini key from env. */
+const authStorage = AuthStorage.inMemory();
+authStorage.setRuntimeApiKey(GEMINI_PROVIDER, config.geminiApiKey);
 
 /** Hot cache of live AgentSession instances. */
 const liveSessions = new Map<string, AgentSession>();
@@ -27,30 +22,10 @@ const liveSessions = new Map<string, AgentSession>();
 /** Tracks which session IDs are currently streaming (for 409 guard). */
 const streaming = new Set<string>();
 
-function parseModel(modelSpec: string): { provider: string; modelId: string } {
-  const idx = modelSpec.indexOf("/");
-  if (idx === -1) {
-    throw new Error(
-      `Invalid model format: "${modelSpec}". Expected "provider/modelId", e.g. "anthropic/claude-opus-4-5".`,
-    );
-  }
-  return {
-    provider: modelSpec.slice(0, idx),
-    modelId: modelSpec.slice(idx + 1),
-  };
-}
-
-export async function createSession(modelSpec: string): Promise<AgentSession> {
-  syncApiKeysToAuthStorage();
-  const { provider, modelId } = parseModel(modelSpec);
-
-  // getModel is typed narrowly on the known provider/model set; cast through any
-  // because we accept arbitrary strings from the client.
-  let model: ReturnType<typeof getModel>;
-  try {
-    model = getModel(provider as any, modelId as any);
-  } catch (err) {
-    throw new Error(`Unknown model: ${provider}/${modelId}`);
+export async function createSession(modelId: string): Promise<AgentSession> {
+  const model = getModel(GEMINI_PROVIDER as any, modelId as any);
+  if (!model) {
+    throw new Error(`Unknown Gemini model: ${modelId}`);
   }
 
   const { session } = await createAgentSession({
@@ -68,7 +43,6 @@ export async function getSession(sessionId: string): Promise<AgentSession | null
   const cached = liveSessions.get(sessionId);
   if (cached) return cached;
 
-  // Try to hydrate from disk
   const all = await SessionManager.list(config.workspaceDir);
   const info = all.find((s) => s.id === sessionId);
   if (!info) return null;
@@ -99,7 +73,6 @@ export async function listSessions(): Promise<SessionSummary[]> {
     firstMessage: s.firstMessage,
   }));
 
-  // Include in-memory-only sessions (created but no messages yet)
   for (const [id, session] of liveSessions) {
     if (onDisk.has(id)) continue;
     const model = session.model;
@@ -119,8 +92,7 @@ export async function listSessions(): Promise<SessionSummary[]> {
 /** Read the last model_change entry from a JSONL file. */
 function extractModelFromSession(jsonlPath: string): string | undefined {
   try {
-    const fs = require("node:fs") as typeof import("node:fs");
-    const content = fs.readFileSync(jsonlPath, "utf-8");
+    const content = readFileSync(jsonlPath, "utf-8");
     const lines = content.split("\n").filter(Boolean);
     let model: string | undefined;
     for (const line of lines) {

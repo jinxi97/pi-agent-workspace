@@ -5,7 +5,6 @@ import {
   isStreaming,
   listSessions,
   markStreaming,
-  syncApiKeysToAuthStorage,
   unmarkStreaming,
   type AgentSessionEvent,
 } from "../session-store.js";
@@ -15,7 +14,7 @@ export const sessionsRoutes = new Elysia({ prefix: "/sessions" })
     "/",
     async ({ body }) => {
       try {
-        const session = await createSession(body.model);
+        const session = await createSession(body.model ?? "gemini-3-flash-preview");
         return {
           sessionId: session.sessionId,
           model: session.model
@@ -28,10 +27,13 @@ export const sessionsRoutes = new Elysia({ prefix: "/sessions" })
     },
     {
       body: t.Object({
-        model: t.String({
-          description: "Model in 'provider/modelId' format",
-          examples: ["anthropic/claude-opus-4-5"],
-        }),
+        model: t.Optional(
+          t.String({
+            description: "Gemini model id (defaults to gemini-3-flash-preview)",
+            default: "gemini-3-flash-preview",
+            examples: ["gemini-3-flash-preview", "gemini-2.5-pro"],
+          }),
+        ),
       }),
       detail: {
         tags: ["Sessions"],
@@ -91,7 +93,6 @@ export const sessionsRoutes = new Elysia({ prefix: "/sessions" })
         return;
       }
 
-      syncApiKeysToAuthStorage();
       markStreaming(params.id);
 
       // Bridge push-based subscribe callback into pull-based generator.

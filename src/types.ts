@@ -1,13 +1,9 @@
 export interface CreateSessionBody {
-  model: string; // e.g. "anthropic/claude-opus-4-5" or just "claude-opus-4-5"
+  model: string; // Gemini model id, e.g. "gemini-2.5-pro"
 }
 
 export interface SendMessageBody {
   text: string;
-}
-
-export interface SetApiKeyBody {
-  apiKey: string;
 }
 
 export interface SessionSummary {
