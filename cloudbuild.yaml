@@ -1,0 +1,45 @@
+# Cloud Build config — triggered by push to the connected repo.
+# Builds the Docker image and pushes it to Artifact Registry.
+#
+# Tags applied to the image:
+#   - $SHORT_SHA   (first 7 chars of the commit SHA — always set by triggers)
+#   - latest
+#
+# Before first run, create the repo once:
+#   gcloud artifacts repositories create $_REPOSITORY \
+#     --repository-format=docker \
+#     --location=$_REGION
+
+substitutions:
+  _REGION: us-central1
+  _REPOSITORY: agent-sandbox
+  _IMAGE: pi-agent-workspace
+
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    env:
+      - DOCKER_BUILDKIT=1
+    args:
+      - build
+      - --platform
+      - linux/amd64
+      - --tag
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:${SHORT_SHA}
+      - --tag
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:latest
+      - .
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - --all-tags
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}
+
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:${SHORT_SHA}
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:latest
+
+options:
+  logging: CLOUD_LOGGING_ONLY
